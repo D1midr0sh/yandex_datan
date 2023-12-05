@@ -25,7 +25,7 @@ df = pd.read_csv('ecom_raw.csv', sep=',', decimal=".")
 # PEP8
 df.columns = [x.lower().replace(" ", "_") for x in df.columns]
 
-# устранение пропусков по данным
+# Устранение пропусков по данным
 colours = ['#FFCF48', '#F5617D']
 sns.heatmap(df.isna(), cmap=sns.color_palette(colours), cbar=False)
 plt.savefig("graphics/heatmap_of_missing_data.jpg", bbox_inches="tight")
@@ -38,21 +38,17 @@ print("- - -")
 df = df.dropna(how="any", subset=["channel", "region"])
 
 
-# столбец “payer” с информацией о том, является ли пользователь платящим или нет
+# Столбец “payer” с информацией о том, является ли пользователь платящим или нет
 df["payer"] = df["revenue"].apply(lambda x: int(not isnan(x)))
 
-# округление длительности сессии (так как все числа очень близки к целому, вероятно ошибка в процессе передачи)
+# Округление длительности сессии (так как все числа очень близки к целому, вероятно ошибка в процессе передачи)
 df["sessiondurationsec"] = df["sessiondurationsec"].apply(round)
 
-# добавление столбца с итоговой суммой покупки после промокода 10%
-df["final_price"] = df["revenue"]
-df.loc[df["promo_code"] == 1, "final_price"] = df.loc[df["promo_code"] == 1, "final_price"].apply(lambda x: round(x * 0.9))
-
-# устранение явных дубликатов
+# Устранение явных дубликатов
 if len(df["user_id"]) != len(list(set(df["user_id"]))):
     df = df.drop_duplicates(subset=["user_id"], ignore_index=True)
 
-# устранение ошибок в категориальных данных
+# Устранение ошибок в категориальных данных
 df.loc[df["channel"] == "контексная реклама", "channel"] = "контекстная реклама"
 df.loc[df["device"] == "android", "device"] = "Android"
 df.loc[df["region"] == "Unjted States", "region"] = "United States"
@@ -62,14 +58,13 @@ df.loc[df["region"] == "Frаnce", "region"] = "France"
 df.loc[df["region"] == "Frаncе", "region"] = "France"
 df.loc[df["region"] == "UК", "region"] = "UK"
 
-# преобразование данных с временными значениями
+# Преобразование данных с временными значениями
 df["session_start"] = pd.to_datetime(df["session_start"])
 df["session_end"] = pd.to_datetime(df["session_end"])
 df["session_date"] = pd.to_datetime(df["session_date"])
 df["order_dt"] = pd.to_datetime(df["order_dt"])
 
-
-# проверка на ошибки в данных с временем
+# Проверка на ошибки в данных с временем
 for index, row in df.iterrows():
     row_has_mistake = 0
     if row["session_start"] > row["session_end"] or row["sessiondurationsec"] < 0 :
@@ -81,8 +76,7 @@ for index, row in df.iterrows():
     if row_has_mistake:
         print("Обнаружена ошибка в данных")
 
-
-# период исследования
+# Период исследования
 print(f'Исследуемый период с {max(df["session_date"]).date()} по {min(df["session_date"]).date()} продолжительностью'
       f' {(max(df["session_date"]) - min(df["session_date"])).days} дня')
 sns.displot(df["session_date"], bins=12)
@@ -91,36 +85,116 @@ plt.clf()
 print("После построения гистограммы по месяцам видно, что количество записей распределены про месяцам ненормально, \nно при этом нет выбросов, поэтому стоит учитывать весть период.")
 print("- - -")
 
-# анализ на выбросы
+# Анализ на выбросы
 sns.boxplot(df["sessiondurationsec"])
-plt.savefig(f"graphics/boxplots_session_duration.jpg")
+plt.savefig(f"graphics/boxplot_session_duration.jpg")
 plt.clf()
-sns.displot(df["day"], bins=7)
-plt.savefig("graphics/boxplots_day_of_week.jpg")
+sns.boxplot(df["revenue"])
+plt.savefig(f"graphics/boxplot_revenue.jpg")
 plt.clf()
-print("Ярко выраженной сезонности не обнаружено, но есть выбросы в большую сторону в длительности сессиии.")
+sns.displot(df.loc[df["payer"] == 1, "revenue"])
+plt.savefig(f"graphics/displot_revenue.jpg")
+plt.clf()
+print("Есть выбросы в большую сторону в длительности сессиии и доходе.")
 print("Принято решение устранить их методом тройного интерквартильного размаха.")
-print("Значения выбросов заменены медианой по группе канала рекламы.")
-print("- - -")
+print("Значения выбросов заменены медианой по группе канала рекламы и по региону.")
 
-# устранение выбросов
+# Устранение выбросов
 channels = list(set(df["channel"]))
+regions = list(set(df["region"]))
+sigma_revenue = round(df.loc[df["payer"] == 1, "revenue"].std())
+mean_revenue = round(df.loc[df["payer"] == 1, "revenue"].mean())
 for channel_type in channels:
-    median = int(df.loc[df["channel"] == channel_type, "sessiondurationsec"].median())
-    df.loc[(df["channel"] == channel_type) & (df["sessiondurationsec"] > inq("sessiondurationsec")), "sessiondurationsec"] = median
+    for region in regions:
+        median_sessionduration = df.loc[(df["channel"] == channel_type) & (df["region"] == region), "sessiondurationsec"].median()
+        if isnan(median_sessionduration):
+            median_sessionduration = df.loc[(df["channel"] == channel_type), "sessiondurationsec"].median()
+        df.loc[(df["channel"] == channel_type) & (df["region"] == region) &
+               (df["sessiondurationsec"] > inq("sessiondurationsec")), "sessiondurationsec"] = int(median_sessionduration)
 
-# столбец "time_of_day"
+        # для дохода было принято решение использовать правило сигмы, так как интерквартильный размах отсекал данные, которые не показались команде выбросами
+        median_revenue = df.loc[(df["channel"] == channel_type) & (df["region"] == region) & (df["payer"] == 1), "revenue"].median()
+        if isnan(median_revenue):
+            median_revenue = df.loc[(df["channel"] == channel_type) & (df["payer"] == 1), "revenue"].median()
+        if median_revenue == 5499:
+            median_revenue = 4999
+        df.loc[(df["channel"] == channel_type) & (df["region"] == region) & (
+                df["revenue"] > mean_revenue + sigma_revenue) & (df["payer"] == 1), "revenue"] = int(median_revenue)
+        df.loc[(df["channel"] == channel_type) & (df["region"] == region) & (
+                    df["revenue"] < abs(mean_revenue - sigma_revenue)) & (df["payer"] == 1), "revenue"] = int(median_revenue)
+
+# Добавление столбца "time_of_day" в зависимости от времени суток
 df["time_of_day"] = df["session_start"].apply(sort_by_time_of_day)
 
-# ТЗ (невыполненные пункты).
-# Провести аналитический и графический анализ данных:
-# # Доля продаж по регионам
-# # Доля продаж по источникам
-# # Доля продаж по устройствам
-# # Количество пользователей с разбивкой на платящих/не платящих по регионам
-# # Количество пользователей с разбивкой на платящих/не платящих по устройствам
-# # Количество пользователей с разбивкой на платящих/не платящих по источникам
-# # Графики, показывающие есть ли сезонность в продажах по месяцам, дням недели, времени суток
-# # Диаграмма количества покупок по типу оплаты
+# Добавление столбца "promo_code" с итоговой суммой покупки после промокода 10%
+df["final_price"] = df["revenue"]
+df.loc[df["promo_code"] == 1, "final_price"] = df.loc[df["promo_code"] == 1, "final_price"].apply(lambda x: round(x * 0.9))
+
+# Доля продаж по регионам
+y = df.loc[df["payer"] == 1, "region"].value_counts()
+plt.figure(figsize=(5, 5))
+plt.pie(y, labels=y.index, labeldistance=1.05)
+plt.suptitle("Доля продаж по регионам", size=16)
+plt.savefig("graphics/sales_by_region.jpg")
+plt.clf()
+
+# Доля продаж по источникам
+y = df.loc[df["payer"] == 1, "channel"].value_counts()
+plt.figure(figsize=(7, 5))
+plt.pie(y, labels=y.index, labeldistance=1.05)
+plt.suptitle("Доля продаж по источникам", size=16)
+plt.savefig("graphics/sales_by_channel.jpg")
+plt.clf()
+
+# Доля продаж по устройствам
+y = df.loc[df["payer"] == 1, "device"].value_counts()
+plt.figure(figsize=(5, 5))
+plt.pie(y, labels=y.index, labeldistance=1.05)
+plt.suptitle("Доля продаж по устройствам", size=16)
+plt.savefig("graphics/sales_by_device.jpg")
+plt.clf()
+
+# Сезонность
+sns.displot(df["day"], bins=7)
+plt.suptitle("Сезонность дням недели", size=16)
+plt.savefig("graphics/displot_by_day_of_week.jpg")
+plt.clf()
+sns.displot(df["month"], bins=6)
+plt.suptitle("Сезонность месяцам", size=16)
+plt.savefig("graphics/displot_by_month.jpg")
+plt.clf()
+sns.displot(df["time_of_day"], bins=4)
+plt.suptitle("Сезонность по времени дня", size=16)
+plt.savefig("graphics/displot_by_time_of_day.jpg")
+plt.clf()
+
+# Количество пользователей с разбивкой на платящих/не платящих по регионам
+plt.figure(figsize=(5, 7))
+sns.histplot(df, x="region", hue="payer", stat="count", multiple="stack")
+plt.suptitle("Количество посетителей по регионам", size=16)
+plt.savefig("graphics/visitors_and_region.jpg")
+plt.clf()
+
+# По устройствам
+plt.figure(figsize=(5, 7))
+sns.histplot(df, x="device", hue="payer", stat="count", multiple="stack")
+plt.suptitle("Количество посетителей по устройствам", size=16)
+plt.savefig("graphics/visitors_and_device.jpg")
+plt.clf()
+
+# По каналу рекламы
+plt.figure(figsize=(5, 7))
+sns.histplot(df, x="channel", hue="payer", stat="count", multiple="stack", cbar=False)
+plt.suptitle("Количество посетителей \nпо каналу рекламы", size=16)
+plt.xticks(rotation=19)
+plt.savefig("graphics/visitors_and_channel.jpg")
+plt.clf()
+
+# Диаграмма количества покупок по типу оплаты
+sns.histplot(df, x="payment_type", stat="count")
+plt.xticks(rotation=18)
+plt.suptitle("Количество покупок по типу оплаты", size=16)
+plt.savefig("graphics/sales_and_payment_type.jpg")
+plt.clf()
 
 df.to_csv(r"ecom_processed.csv")
