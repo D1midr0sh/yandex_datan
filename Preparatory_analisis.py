@@ -156,11 +156,11 @@ plt.clf()
 
 # Сезонность
 sns.displot(df["day"], bins=7)
-plt.suptitle("Сезонность дням недели", size=16)
+plt.suptitle("Сезонность по дням недели", size=16)
 plt.savefig("graphics/displot_by_day_of_week.jpg")
 plt.clf()
 sns.displot(df["month"], bins=6)
-plt.suptitle("Сезонность месяцам", size=16)
+plt.suptitle("Сезонность по месяцам", size=16)
 plt.savefig("graphics/displot_by_month.jpg")
 plt.clf()
 sns.displot(df["time_of_day"], bins=4)
