@@ -31,11 +31,20 @@ sns.heatmap(df.isna(), cmap=sns.color_palette(colours), cbar=False)
 plt.savefig("graphics/heatmap_of_missing_data.jpg", bbox_inches="tight")
 print(f'Строки с пропусками составляют {round(df["channel"].isna().value_counts()[True] / len(df["channel"]) * 100, 2)}%')
 print("Eсть пропуски в категориальных данных, пропущен регион, устройство и тип канала. "
-      "\nТак как для ответа на основной вопрос исследования ключевыми являются регион и тип канала, "
-      "то такие данные не могут помочь ответить на него. \nИх процентное соотношение маленькое и "
-      "не было найдено рационального способа эти данные остановить, поэтому принято решение удалить эти строки.")
+      "\nПосле поиска по индексу в пропусках было обнаружено, что некоторые индексы совпадают с теми"
+      "которые ранее были найдены в датасете. \nБыло принято решение подставить эти категориальные данные, а те строки"
+      ", \nid которых ранее не встречался или в нем тоже отсутствуют категориальные данные, было принято решение удалить")
 print("- - -")
+df1 = pd.DataFrame(df[df["region"].isnull()]["user_id"])
+values = pd.DataFrame(df["user_id"].value_counts())
+for uid in df1["user_id"]:
+    if values.loc[uid, "count"] == 2:
+        line2 = df.loc[df["user_id"] == uid].iloc[0]
+        df.loc[df["user_id"] == uid, "device"] = line2["device"]
+        df.loc[df["user_id"] == uid, "region"] = line2["region"]
+        df.loc[df["user_id"] == uid, "channel"] = line2["channel"]
 df = df.dropna(how="any", subset=["channel", "region"])
+df = df.reset_index(drop=True)
 
 
 # Столбец “payer” с информацией о том, является ли пользователь платящим или нет
@@ -46,7 +55,7 @@ df["sessiondurationsec"] = df["sessiondurationsec"].apply(round)
 
 # Устранение явных дубликатов
 if len(df["user_id"]) != len(list(set(df["user_id"]))):
-    df = df.drop_duplicates(subset=["user_id"], ignore_index=True)
+    df = df.drop_duplicates(ignore_index=True)
 
 # Устранение ошибок в категориальных данных
 df.loc[df["channel"] == "контексная реклама", "channel"] = "контекстная реклама"
