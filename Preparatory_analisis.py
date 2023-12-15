@@ -24,7 +24,6 @@ df = pd.read_csv('ecom_raw.csv', sep=',', decimal=".")
 
 # PEP8
 df.columns = [x.lower().replace(" ", "_") for x in df.columns]
-
 # Устранение пропусков по данным
 colours = ['#FFCF48', '#F5617D']
 sns.heatmap(df.isna(), cmap=sns.color_palette(colours), cbar=False)
@@ -207,3 +206,5 @@ plt.savefig("graphics/sales_and_payment_type.jpg")
 plt.clf()
 
 df.to_csv(r"ecom_processed.csv")
+sc = df["user_id"].value_counts().mean()
+print(sc)
