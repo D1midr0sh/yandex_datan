@@ -206,5 +206,3 @@ plt.savefig("graphics/sales_and_payment_type.jpg")
 plt.clf()
 
 df.to_csv(r"ecom_processed.csv")
-sc = df["user_id"].value_counts().mean()
-print(sc)
